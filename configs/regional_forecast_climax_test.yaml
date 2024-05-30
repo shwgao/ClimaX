@@ -2,15 +2,16 @@ seed_everything: 42
 
 # ---------------------------- TRAINER -------------------------------------------
 trainer:
-  default_root_dir: . # ${oc.env:OUTPUT_DIR,/home/t-tungnguyen/ClimaX/exps/regional_forecast_climax}
+  default_root_dir: ./profile # ${oc.env:OUTPUT_DIR,/home/t-tungnguyen/ClimaX/exps/regional_forecast_climax}
 
   precision: 16
 
   gpus: null
   num_nodes: 1
   accelerator: gpu
-  devices: [2]
+  devices: [1]
   strategy: ddp
+  profiler: simple
 
   min_epochs: 1
   max_epochs: 1
@@ -20,10 +21,7 @@ trainer:
   enable_checkpointing: True
   resume_from_checkpoint: null
 
-  # debugging
-  fast_dev_run: false
-
-  profiler: advanced
+  fast_dev_run: False
 
   logger:
     class_path: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
@@ -55,7 +53,7 @@ trainer:
       init_args:
         monitor: "val/w_rmse" # name of the logged metric which determines when model is improving
         mode: "min" # "max" means higher metric value is better, can be also "min"
-        patience: 5 # how many validation epochs of not improving until training stops
+        patience: 10 # how many validation epochs of not improving until training stops
         min_delta: 0. # minimum change in the monitored metric needed to qualify as an improvement
 
     - class_path: pytorch_lightning.callbacks.RichModelSummary
@@ -63,10 +61,6 @@ trainer:
         max_depth: -1
 
     - class_path: pytorch_lightning.callbacks.RichProgressBar
-
-    - class_path: pytorch_lightning.callbacks.DeviceStatsMonitor
-      init_args:
-        cpu_stats: True
 
 # ---------------------------- MODEL -------------------------------------------
 model:
@@ -201,6 +195,6 @@ data:
   predict_range: 72
   hrs_each_step: 1
   buffer_size: 10000
-  batch_size: 100
+  batch_size: 1
   num_workers: 1
   pin_memory: False

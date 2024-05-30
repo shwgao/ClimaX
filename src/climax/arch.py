@@ -14,9 +14,10 @@ from climax.utils.pos_embed import (
 )
 
 from .parallelpatchembed import ParallelVarPatchEmbed
+from pytorch_lightning import LightningModule
 
 
-class ClimaX(nn.Module):
+class ClimaX(LightningModule):
     """Implements the ClimaX model as described in the paper,
     https://arxiv.org/abs/2301.10343
 
@@ -191,7 +192,7 @@ class ClimaX(nn.Module):
         x = x.flatten(0, 1)  # BxL, V, D
 
         var_query = self.var_query.repeat_interleave(x.shape[0], dim=0)
-        x, _ = self.var_agg(var_query, x, x)  # BxL, D
+        x, _ = self.var_agg(var_query, x, x)  # BxL, D # pass need_weights=False to save computation x = self.var_agg(var_query, x, x, need_weights=False)  # BxL, D
         x = x.squeeze()
 
         x = x.unflatten(dim=0, sizes=(b, l))  # B, L, D
@@ -216,7 +217,7 @@ class ClimaX(nn.Module):
             x = torch.stack(embeds, dim=1)  # B, V, L, D
 
         # add variable embedding
-        var_embed = self.get_var_emb(self.var_embed, variables)
+        var_embed = self.get_var_emb(self.var_embed, variables) # 1, V, D
         x = x + var_embed.unsqueeze(2)  # B, V, L, D
 
         # variable aggregation

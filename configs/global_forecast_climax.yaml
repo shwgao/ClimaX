@@ -2,17 +2,19 @@ seed_everything: 42
 
 # ---------------------------- TRAINER -------------------------------------------
 trainer:
-  default_root_dir: ${oc.env:OUTPUT_DIR,/home/t-tungnguyen/ClimaX/exps/global_forecast_climax}
+  default_root_dir: . #${oc.env:OUTPUT_DIR,/home/t-tungnguyen/ClimaX/exps/global_forecast_climax}
 
   precision: 16
 
   gpus: null
+  devices: [0]
   num_nodes: 1
   accelerator: gpu
   strategy: ddp
+  profiler: simple
 
   min_epochs: 1
-  max_epochs: 100
+  max_epochs: 50
   enable_progress_bar: true
 
   sync_batchnorm: True
@@ -52,7 +54,7 @@ trainer:
       init_args:
         monitor: "val/w_rmse" # name of the logged metric which determines when model is improving
         mode: "min" # "max" means higher metric value is better, can be also "min"
-        patience: 5 # how many validation epochs of not improving until training stops
+        patience: 10 # how many validation epochs of not improving until training stops
         min_delta: 0. # minimum change in the monitored metric needed to qualify as an improvement
 
     - class_path: pytorch_lightning.callbacks.RichModelSummary
@@ -71,7 +73,7 @@ model:
   max_epochs: 100000
   warmup_start_lr: 1e-8
   eta_min: 1e-8
-  pretrained_path: ""
+  pretrained_path: "./checkpoints/5.625deg.ckpt"
 
   net:
     class_path: climax.arch.ClimaX
@@ -138,7 +140,7 @@ model:
 
 # ---------------------------- DATA -------------------------------------------
 data:
-  root_dir: /datadrive/datasets/5.625deg_equally_np/
+  root_dir: /a/bear.cs.fiu.edu./disk/bear-b/users/sgao014/datasets/ClimaX/
   variables: [
       "land_sea_mask",
       "orography",
@@ -193,6 +195,6 @@ data:
   predict_range: 72
   hrs_each_step: 1
   buffer_size: 10000
-  batch_size: 128
+  batch_size: 64
   num_workers: 1
   pin_memory: False

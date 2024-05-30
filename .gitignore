@@ -136,3 +136,9 @@ exps
 
 # snakemake logs
 .snakemake
+
+checkpoints/
+profile/
+lightning_logs/
+
+*.tar.gz
