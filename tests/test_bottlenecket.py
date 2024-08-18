@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 import os
+import sys
 
 import torch
 import pytorch_lightning as pl
@@ -24,9 +25,7 @@ from have_fun import start_record_memory_history, export_memory_snapshot, stop_r
 # profile_task = f'global11_forecast_climax_test-{time.strftime("%m%d%H%M")}'
 
 
-def main_profiler():
-    profile_task = f'regional_forecast_climax_test-{time.strftime("%m%d%H%M")}'
-
+def main_profiler_regional():
     cli = LightningCLI(
         model_class=RegionalForecastModule,
         datamodule_class=RegionalForecastDataModule,
@@ -48,6 +47,8 @@ def main_profiler():
     cli.model.set_pred_range(cli.datamodule.hparams.predict_range)
     cli.model.set_val_clim(cli.datamodule.val_clim)
     cli.model.set_test_clim(cli.datamodule.test_clim)
+    
+    profile_task = f'regional_bz40_inference_SouthAmerica-{time.strftime("%m%d%H%M")}-fused'
 
     # logger = TensorBoardLogger(f'./profile/{profile_task}', name=profile_task)
     profiler = PyTorchProfiler(
@@ -55,68 +56,38 @@ def main_profiler():
             torch.profiler.ProfilerActivity.CPU,
             torch.profiler.ProfilerActivity.CUDA,
         ],
-        schedule=torch.profiler.schedule(wait=2, warmup=1, active=2, repeat=1),
+        schedule=torch.profiler.schedule(wait=4, warmup=2, active=4, repeat=1),
         record_shapes=True,
         profile_memory=True,
         with_stack=True,
         with_modules=True,
         # on_trace_ready=trace_handler,
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/{profile_task}'),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/offload_debug/{profile_task}'),
     )
     trainer = pl.Trainer(
         accelerator='gpu',
-        devices=[1],
+        devices=[3],
         max_epochs=1,
-        limit_train_batches=5,
-        limit_val_batches=5,
-        limit_test_batches=5,
+        limit_train_batches=10,
+        limit_val_batches=0,
+        limit_test_batches=10,
         # logger=logger,
-        # profiler=profiler,
+        profiler=profiler,
         precision=16,
         inference_mode=True,
     )
 
-    # start_record_memory_history()
-
-    # trainer.fit(cli.model, datamodule=cli.datamodule)
-    # trainer.test(cli.model, datamodule=cli.datamodule)
-
-    # Create the memory snapshot file
-    # export_memory_snapshot()
-
-    # Stop recording memory snapshot history
-    # stop_record_memory_history()
-
-    # trainer.fit(cli.model, datamodule=cli.datamodule)
+    trainer.test(cli.model, datamodule=cli.datamodule)
     
-    # cli.model.eval()
-    cli.datamodule.setup()
-    test_loader = cli.datamodule.test_dataloader()
-    x, y, lead_times, variables, out_variables, region_info = next(iter(test_loader))
-    
-    with torch.profiler.profile(
-        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/{profile_task}'),
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True
-    ) as prof:
-        # for step, batch_data in enumerate(test_loader):
-        #     prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
-        #     if step >= 1 + 1 + 3:
-        #         break
-        #     cli.model.test_step(batch_data, step)
-        trainer.fit(cli.model, datamodule=cli.datamodule)
-    
-    example_input = (x, y, lead_times, variables, out_variables, None, torch.tensor(cli.model.lat), region_info, {})
-    
-    cli.model.net.to_onnx('./checkpoints/regional_forecast.onnx', input_sample=example_input, export_params=True)
+    def export_onnx():
+        cli.datamodule.setup()
+        test_loader = cli.datamodule.test_dataloader()
+        x, y, lead_times, variables, out_variables, region_info = next(iter(test_loader))
+        example_input = (x, y, lead_times, variables, out_variables, None, torch.tensor(cli.model.lat), region_info, {})
+        cli.model.net.to_onnx('./checkpoints/regional_forecast.onnx', input_sample=example_input, export_params=True)
 
 
 def main_profiler_global():
-    profile_task = f'global11_forecast_climax_test-{time.strftime("%m%d%H%M")}'
-
     cli = LightningCLI(
         model_class=GlobalForecastModule,
         datamodule_class=GlobalForecastDataModule,
@@ -137,65 +108,50 @@ def main_profiler_global():
     cli.model.set_val_clim(cli.datamodule.val_clim)
     cli.model.set_test_clim(cli.datamodule.test_clim)
 
+    profile_task = f'global_bz20_inference-{time.strftime("%m%d%H%M")}-hidet'
     # # logger = TensorBoardLogger(f'./profile/{profile_task}', name=profile_task)
-    # profiler = PyTorchProfiler(
-    #     activities=[
-    #         torch.profiler.ProfilerActivity.CPU,
-    #         torch.profiler.ProfilerActivity.CUDA,
-    #     ],
-    #     schedule=torch.profiler.schedule(wait=2, warmup=1, active=2, repeat=1),
-    #     record_shapes=True,
-    #     profile_memory=True,
-    #     with_stack=True,
-    #     with_modules=True,
-    #     # on_trace_ready=trace_handler,
-    #     on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/{profile_task}'),
-    # )
-    trainer = pl.Trainer(
-        accelerator='gpu',
-        devices=[1],
-        max_epochs=1,
-        limit_train_batches=5,
-        limit_val_batches=5,
-        limit_test_batches=5,
-        # logger=logger,
-        # profiler=profiler,
-        precision=16,
-        fast_dev_run=True,
-        inference_mode=True,
-    )
-
-    # trainer.fit(cli.model, datamodule=cli.datamodule)
-    
-    cli.model.eval()
-    cli.datamodule.setup()
-    test_loader = cli.datamodule.test_dataloader()
-    x, y, lead_times, variables, out_variables = next(iter(test_loader))
-    
-    with torch.profiler.profile(
-        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+    profiler = PyTorchProfiler( activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
         schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/{profile_task}'),
         record_shapes=True,
         profile_memory=True,
-        with_stack=True
-    ) as prof:
-        # for step, batch_data in enumerate(test_loader):
-        #     prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
-        #     if step >= 1 + 1 + 3:
-        #         break
-        #     cli.model.test_step(batch_data, step)
-        trainer.test(cli.model, datamodule=cli.datamodule)
+        with_stack=True,
+        with_modules=True,
+        # on_trace_ready=trace_handler,
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/{profile_task}'),
+    )
     
-    example_input = (x, y, lead_times, variables, out_variables, None, None)
+    trainer = pl.Trainer(
+        accelerator='gpu',
+        devices=[3],
+        max_epochs=1,
+        limit_train_batches=5,
+        limit_val_batches=0,
+        limit_test_batches=5,
+        # logger=logger,
+        profiler=profiler,
+        precision=32,
+        inference_mode=True,
+    )
     
-    cli.model.net.to_onnx('./checkpoints/global_forecast.onnx', input_sample=tuple(example_input), export_params=True)
+    cli.model = torch.compile(cli.model, backend='hidet')
+
+    trainer.test(cli.model, datamodule=cli.datamodule)
+    
+    def export_onnx():
+        cli.model.eval()
+        cli.datamodule.setup()
+        test_loader = cli.datamodule.test_dataloader()
+        x, y, lead_times, variables, out_variables = next(iter(test_loader))
+        example_input = (x, y, lead_times, variables, out_variables, None, None)
+        cli.model.net.to_onnx('./checkpoints/global_forecast.onnx', input_sample=tuple(example_input), export_params=True)
 
 
 
 def main_profiler_projection():
-    profile_task = f'projection_bz4_forecast_climax_test-{time.strftime("%m%d%H%M")}'
-
+    
     # Initialize Lightning with the model and data modules, and instruct it to parse the config yml
     cli = LightningCLI(
         model_class=ClimateProjectionModule,
@@ -216,6 +172,9 @@ def main_profiler_projection():
     cli.model.set_pred_range(0)
     cli.model.set_val_clim(None)
     cli.model.set_test_clim(cli.datamodule.get_test_clim())
+    cli.model.net = torch.compile(cli.model.net)
+    
+    profile_task = f'projection_bz12-train_compile-{time.strftime("%m%d%H%M")}'
 
     # logger = TensorBoardLogger(f'./profile/{profile_task}', name=profile_task)
     profiler = PyTorchProfiler(
@@ -237,7 +196,7 @@ def main_profiler_projection():
         devices=[2],
         max_epochs=1,
         limit_train_batches=5,
-        limit_val_batches=5,
+        limit_val_batches=0,
         limit_test_batches=5,
         # logger=logger,
         # profiler=profiler,
@@ -245,33 +204,17 @@ def main_profiler_projection():
         inference_mode=True,
     )
 
-    # trainer.fit(cli.model, datamodule=cli.datamodule)
-    
-    test_loader = cli.datamodule.test_dataloader()
-    x, y, lead_times, variables, out_variables = next(iter(test_loader))
-    
-    with torch.profiler.profile(
-        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/{profile_task}'),
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True
-    ) as prof:
-        # for step, batch_data in enumerate(test_loader):
-        #     prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
-        #     if step >= 1 + 1 + 3:
-        #         break
-        #     cli.model.test_step(batch_data, step)
-        trainer.fit(cli.model, datamodule=cli.datamodule)
-    
-    example_input = (x, y, lead_times, variables, out_variables, None, None)
-    
-    cli.model.net.to_onnx('./checkpoints/projection.onnx', input_sample=example_input, export_params=True)
+    trainer.fit(cli.model, datamodule=cli.datamodule)
+
+    def export_onnx():
+        test_loader = cli.datamodule.test_dataloader()
+        x, y, lead_times, variables, out_variables = next(iter(test_loader))
+        example_input = (x, y, lead_times, variables, out_variables, None, None)
+        cli.model.net.to_onnx('./checkpoints/projection.onnx', input_sample=example_input, export_params=True)
 
 
 if __name__ == "__main__":
     # main()
-    # main_profiler()
-    # main_profiler_global()
-    main_profiler_projection()
+    # main_profiler_regional()
+    main_profiler_global()
+    # main_profiler_projection()

@@ -73,7 +73,7 @@ model:
   max_epochs: 100000
   warmup_start_lr: 1e-8
   eta_min: 1e-8
-  pretrained_path: "./checkpoints/5.625deg.ckpt"
+  # pretrained_path: "./checkpoints/5.625deg.ckpt"
 
   net:
     class_path: climax.arch.ClimaX
@@ -195,6 +195,6 @@ data:
   predict_range: 72
   hrs_each_step: 1
   buffer_size: 10000
-  batch_size: 1
+  batch_size: 20
   num_workers: 1
   pin_memory: False

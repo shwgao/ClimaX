@@ -14,6 +14,11 @@ import torch.nn as nn
 from climax.arch import ClimaX
 from climax.utils.pos_embed import get_1d_sincos_pos_embed_from_grid
 
+def print_memory_variable(label):
+    current_memory = torch.cuda.memory_allocated()
+    print('*********************************************')
+    print(f"{label}: {current_memory / (1024 ** 2)} MB")
+    print('*********************************************')
 
 class ClimaXClimateBench(ClimaX):
     def __init__(
@@ -94,15 +99,20 @@ class ClimaXClimateBench(ClimaX):
             for i in range(len(var_ids)):
                 id = var_ids[i]
                 embeds.append(self.token_embeds[id](x[:, i : i + 1]))
+            print_memory_variable('stack_before')
             x = torch.stack(embeds, dim=1)  # BxT, V, L, D
+            print_memory_variable('stack_after')
 
         # add variable embedding
         var_embed = self.get_var_emb(self.var_embed, variables)
+        print_memory_variable('add_before')
         x = x + var_embed.unsqueeze(2)  # BxT, V, L, D
-
+        print_memory_variable('add_after')        
+        
         # variable aggregation
         x = self.aggregate_variables(x)  # BxT, L, D
 
+        print_memory_variable('aggregation_after') 
         # add pos embedding
         x = x + self.pos_embed
 
@@ -110,6 +120,7 @@ class ClimaXClimateBench(ClimaX):
         # time emb: 1, T, D
         x = x.unflatten(0, sizes=(b, t)) # B, T, L, D
         x = x + self.time_pos_embed.unsqueeze(2)
+        print_memory_variable('time_embedding_after') 
 
         # add lead time embedding
         lead_time_emb = self.lead_time_embed(lead_times.unsqueeze(-1)) # B, D
@@ -120,9 +131,11 @@ class ClimaXClimateBench(ClimaX):
 
         x = self.pos_drop(x)
 
+        print_memory_variable('backbone_before')
         # apply Transformer blocks
         for blk in self.blocks:
             x = blk(x)
+            print_memory_variable('backbone_iter')
         x = self.norm(x) # BxT, L, D
         x = x.unflatten(0, sizes=(b, t)) # B, T, L, D
 
@@ -131,6 +144,7 @@ class ClimaXClimateBench(ClimaX):
         time_query = self.time_query.repeat_interleave(x.shape[0], dim=0)
         x, _ = self.time_agg(time_query, x, x)  # B, 1, D
 
+        print_memory_variable('return_before') 
         return x
 
     def forward(self, x, y, lead_times, variables, out_variables, metric, lat):

@@ -116,6 +116,6 @@ data:
   ]
   out_variables: 'tas'
   train_ratio: 0.9
-  batch_size: 4
-  num_workers: 32
+  batch_size: 12
+  num_workers: 1
   pin_memory: False

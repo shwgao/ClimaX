@@ -3,8 +3,6 @@
 
 from functools import lru_cache
 
-# import fused_stack_add
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -185,21 +183,6 @@ class ClimaX(LightningModule):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, w * p))
         return imgs
 
-    def aggregate_variables_copy(self, x: torch.Tensor):
-        """
-        x: B, V, L, D
-        """
-        b, _, l, _ = x.shape
-        x = torch.einsum("bvld->blvd", x)
-        x = x.flatten(0, 1)  # BxL, V, D
-
-        var_query = self.var_query.repeat_interleave(x.shape[0], dim=0)
-        x, _ = self.var_agg(var_query, x, x)  # BxL, D # pass need_weights=False to save computation x = self.var_agg(var_query, x, x, need_weights=False)  # BxL, D
-        x = x.squeeze()
-
-        x = x.unflatten(dim=0, sizes=(b, l))  # B, L, D
-        return x
-    
     def aggregate_variables(self, x: torch.Tensor):
         """
         x: B, V, L, D
@@ -224,34 +207,37 @@ class ClimaX(LightningModule):
         # tokenize each variable separately
         embeds = []
         var_ids = self.get_var_ids(variables, x.device)
-        
-        # add variable embedding
-        var_embed = self.get_var_emb(self.var_embed, variables).contiguous() # 1, V, D
 
         if self.parallel_patch_embed:
             x = self.token_embeds(x, var_ids)  # B, V, L, D
         else:
             for i in range(len(var_ids)):
                 id = var_ids[i]
-                embeds.append(self.token_embeds[id](x[:, i : i + 1].contiguous()))  # B, 1, L, D
+                embeds.append(self.token_embeds[id](x[:, i : i + 1]))
+            print('embeding object size:', get_total_size(embeds))
             x = torch.stack(embeds, dim=1)  # B, V, L, D
-            # x = fused_stack_add.forward(embeds, var_embed, 1)  # B, V, L, D
-        
+            # print tensor stride
+            print('stride:', x.stride())
+            print('embeds\' stride:', [emb.stride() for emb in embeds])
+            # x = torch.stack([emb.cpu() for emb in embeds], dim=1)
+
+        # add variable embedding
+        var_embed = self.get_var_emb(self.var_embed, variables) # 1, V, D
         x = x + var_embed.unsqueeze(2)  # B, V, L, D
-        # x += var_embed.unsqueeze(2)  # B, V, L, D
+        # x = x + var_embed.cpu().unsqueeze(2)  # B, V, L, D
 
         # variable aggregation
         x = self.aggregate_variables(x)  # B, L, D
 
         # add pos embedding
         x = x + self.pos_embed
-        # x += self.pos_embed
+        # x = x + self.pos_embed.cpu()
 
         # add lead time embedding
         lead_time_emb = self.lead_time_embed(lead_times.unsqueeze(-1))  # B, D
         lead_time_emb = lead_time_emb.unsqueeze(1)
         x = x + lead_time_emb  # B, L, D
-        # x += lead_time_emb  # B, L, D
+        # x = x + lead_time_emb.cpu()  # B, L, D
 
         x = self.pos_drop(x)
         

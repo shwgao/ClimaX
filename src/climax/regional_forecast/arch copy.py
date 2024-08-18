@@ -3,7 +3,6 @@
 
 import torch
 from climax.arch import ClimaX
-# import fused_stack_add_index
 
 def print_memory_variable(label):
     current_memory = torch.cuda.memory_allocated()
@@ -20,38 +19,32 @@ class RegionalClimaX(ClimaX):
 
         if isinstance(variables, list):
             variables = tuple(variables)
-        
-        var_embed = self.get_var_emb(self.var_embed, variables)  # 1, V, D
 
         # tokenize each variable separately
         embeds = []
         var_ids = self.get_var_ids(variables, x.device)
-        
-        # get the patch ids corresponding to the region
-        region_patch_ids = torch.tensor(region_info['patch_ids']).to(x.device)
-        
         for i in range(len(var_ids)):
             id = var_ids[i]
             embeds.append(self.token_embeds[id](x[:, i : i + 1]))  # [V * (B, L, D)]
         # print_memory_variable('stack_before')
-        embeds = [embed.contiguous() for embed in embeds]
-        x1 = torch.stack(embeds, dim=1)  # B, V, L, D
-        x1 += var_embed.unsqueeze(2)  # B, V, L, D
-        x1 = x1[:, :, region_patch_ids, :]
-        
-        print('var_embed', var_embed.is_contiguous())
-        for embed in embeds:
-            print(embed.is_contiguous())
-        x = fused_stack_add_index.forward(embeds, var_embed, region_patch_ids, 1, 2)  # B, V, L, D
+        x = torch.stack(embeds, dim=1)  # B, V, L, D
+        # x = torch.stack([emb.cpu() for emb in embeds], dim=1)
+        # x = x.to('cuda:2')
         # print_memory_variable('stack_after')
-        
-        assert torch.all(x == x1)
-        exit(0)
 
         # add variable embedding
-        # x = x + var_embed.unsqueeze(2)  # B, V, L, D
+        var_embed = self.get_var_emb(self.var_embed, variables)  # 1, V, D
+        # print_memory_variable('add_before')
+        x = x + var_embed.unsqueeze(2)  # B, V, L, D
+        # x = x.cpu() + var_embed.cpu().unsqueeze(2)  # B, V, L, D
+        # x = x.to('cuda:2')
+        # print_memory_variable('add_after')  
         
-        # x = x[:, :, region_patch_ids, :]
+        # get the patch ids corresponding to the region
+        region_patch_ids = region_info['patch_ids']
+        # print_memory_variable('add_after x1') 
+        x = x[:, :, region_patch_ids, :]
+        # print_memory_variable('add_after x2') 
         
         # variable aggregation
         x = self.aggregate_variables(x)  # B, L, D
