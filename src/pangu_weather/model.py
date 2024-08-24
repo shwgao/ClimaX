@@ -6,11 +6,15 @@ from timm.models.layers import DropPath, trunc_normal_
 import numpy as np
 
 def LoadConstantMask(batch_size):
-    # Mask shape must equal (B, 1, H=1440, W=721) + padding
-    land_mask = np.load("constant_masks/land_mask.npy")
-    soil_type = np.load("constant_masks/soil_type.npy")
-    topography = np.load("constant_masks/topography.npy")
-
+    # # Mask shape must equal (B, 1, H=1440, W=721) + padding
+    # land_mask = np.load("constant_masks/land_mask.npy")
+    # soil_type = np.load("constant_masks/soil_type.npy")
+    # topography = np.load("constant_masks/topography.npy")
+    
+    land_mask = np.random.random((batch_size, 1, 1440, 721))
+    soil_type = np.random.random((batch_size, 1, 1440, 721))
+    topography = np.random.random((batch_size, 1, 1440, 721))
+    
     # Land mask is binary mask. Convert to torch.Tensor:
     land_mask = torch.from_numpy(land_mask).permute(1,0).view(1,1,1440,721).to(torch.float16)
 
