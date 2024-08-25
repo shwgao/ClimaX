@@ -7,13 +7,13 @@ import numpy as np
 
 def LoadConstantMask(batch_size):
     # # Mask shape must equal (B, 1, H=1440, W=721) + padding
-    # land_mask = np.load("constant_masks/land_mask.npy")
-    # soil_type = np.load("constant_masks/soil_type.npy")
-    # topography = np.load("constant_masks/topography.npy")
+    land_mask = np.load("dataset/pangu/land_mask.npy")
+    soil_type = np.load("dataset/pangu/soil_type.npy")
+    topography = np.load("dataset/pangu/topography.npy")
     
-    land_mask = np.random.random((batch_size, 1, 1440, 721))
-    soil_type = np.random.random((batch_size, 1, 1440, 721))
-    topography = np.random.random((batch_size, 1, 1440, 721))
+    # land_mask = np.random.random((1440, 721))
+    # soil_type = np.random.random((1440, 721))
+    # topography = np.random.random((1440, 721))
     
     # Land mask is binary mask. Convert to torch.Tensor:
     land_mask = torch.from_numpy(land_mask).permute(1,0).view(1,1,1440,721).to(torch.float16)
@@ -29,6 +29,10 @@ def LoadConstantMask(batch_size):
     # Topography needs to be normalized, and converted to torch.Tensor:
     topography = (topography-np.mean(topography))/np.std(topography)
     topography = torch.from_numpy(topography).permute(1,0).view(1,1,1440,721).to(torch.float16)
+    
+    land_mask = land_mask.repeat_interleave(batch_size, 0)
+    soil_type = soil_type.repeat_interleave(batch_size, 0)
+    topography = topography.repeat_interleave(batch_size, 0)
 
     # Make sure the padding is the same as performed on "input_surface" in PatchEmbedding
     return F.pad(land_mask, (2,1)), F.pad(soil_type, (2,1)), F.pad(topography, (2,1))
@@ -419,7 +423,7 @@ class EarthAttention3D(nn.Module):
         position_index = torch.zeros(T**2)
         for idx, coord in enumerate(attention_coordinates):
             position_index[idx] = self._get_bias_index(coord)
-        return position_index.int()
+        return position_index.long()
 
     def _get_bias_index(self, coord):
         i, j = int(coord[0]), int(coord[1])

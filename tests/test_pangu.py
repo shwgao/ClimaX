@@ -5,12 +5,12 @@ import time
 from pangu_weather.model import WeatherModel
 
 # read init args from yaml
-batch_size = 4
+batch_size = 1
 
 
 model = WeatherModel(192, [2,6,6,2], [6,12,12,6], 4, batch_size)
 
-profile_task = f'bz32_inference-{time.strftime("%m%d%H%M")}-or'
+profile_task = f'bz1_inference-{time.strftime("%m%d%H%M")}-or'
 
 # 将数据移动到GPU（如果可用）
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
@@ -50,24 +50,16 @@ with torch.no_grad():
         with_modules=True,
         on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/pangu/{profile_task}'),
     ) as p:
-        try:
-            for batch in datas:
-                p.step()
-                if step >=5:
-                    break
-                                
-                batch[0] = batch[0].to(device)
-                batch[1] = batch[1].to(device)
-                lead_times = lead_times.to(device)
+        for batch in datas:
+            p.step()
+            if step >=5:
+                break
+                            
+            batch[0] = batch[0].to(device)
+            batch[1] = batch[1].to(device)
+            
+            model(batch)                
                 
-                model(batch)                
-                
-        except Exception as e:
-            print(f"An error occurred during profiling: {e}")
-        
-        finally:
-            # 确保分析器正确关闭
-            p.stop()
 
 
 # if __name__ == "__main__":
