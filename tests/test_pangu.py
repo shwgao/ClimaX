@@ -61,6 +61,5 @@ with torch.no_grad():
             model(batch)                
                 
 
-
 # if __name__ == "__main__":
 #     test_parallel_patch_embed()
