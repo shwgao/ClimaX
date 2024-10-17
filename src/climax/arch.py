@@ -200,16 +200,21 @@ class ClimaX(LightningModule):
         x = x.unflatten(dim=0, sizes=(b, l))  # B, L, D
         return x
     
-    def aggregate_variables(self, x: torch.Tensor):
+    def aggregate_variables(self, x_: torch.Tensor):
         """
         x: B, V, L, D
         """
-        b, _, l, _ = x.shape
-        x = torch.einsum("bvld->blvd", x)
-        x = x.flatten(0, 1)  # BxL, V, D
+        b, _, l, _ = x_.shape
+        x_ = torch.einsum("bvld->blvd", x_)
+        x = x_.flatten(0, 1)  # BxL, V, D
+        
+        del x_
 
         var_query = self.var_query.repeat_interleave(x.shape[0], dim=0)
+        #torch.cuda.empty_cache()
         x, _ = self.var_agg(var_query, x, x)  # BxL, D # pass need_weights=False to save computation x = self.var_agg(var_query, x, x, need_weights=False)  # BxL, D
+        #torch.cuda.empty_cache()
+        
         x = x.squeeze()
 
         x = x.unflatten(dim=0, sizes=(b, l))  # B, L, D

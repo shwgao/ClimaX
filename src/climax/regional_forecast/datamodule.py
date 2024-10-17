@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 import torch
-import torchdata.datapipes as dp
+# import torchdata.datapipes as dp
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, IterableDataset
 from torchvision.transforms import transforms

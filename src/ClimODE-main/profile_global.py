@@ -38,7 +38,7 @@ parser.add_argument('--rtol', type=float, default=5e-3)
 parser.add_argument("--step_size", type=float, default=None, help="Optional fixed step size.")
 parser.add_argument('--niters', type=int, default=300)
 parser.add_argument('--scale', type=int, default=0)
-parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--spectral', type=int, default=0,choices=[0,1])
 parser.add_argument('--lr', type=float, default=0.0005)
 parser.add_argument('--weight_decay', type=float, default=1e-5)
@@ -107,72 +107,50 @@ best_epoch = float('inf')
 print("############################ Data is loaded, Fitting the velocity #########################")
 
 get_gauss_kernel((32,64),lat,lon)
-kernel = torch.from_numpy(np.load(str(cwd) +"/kernel.npy"))
+kernel_path = '/nfs/stak/users/gaosho/hpc-share/dataset/climODE'
+kernel = torch.from_numpy(np.load(kernel_path +"/kernel.npy"))
 #breakpoint()
 print('fitting velocity')
-fit_velocity(time_idx,time_loader,Final_train_data,Train_loader,torch.device('cpu'),num_years,paths_to_data,args.scale,H,W,types='train_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
 fit_velocity(time_idx,time_loader,Final_val_data,Val_loader,torch.device('cpu'),1,paths_to_data,args.scale,H,W,types='val_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
-fit_velocity(time_idx,time_loader,Final_test_data,Test_loader,torch.device('cpu'),2,paths_to_data,args.scale,H,W,types='test_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
 
 vel_train,vel_val = load_velocity(['train_10year_2day_mm','val_10year_2day_mm'])
 print("############################ Velocity loaded, Model starts to train #########################")
 print(model)
 print("####################### Total Parameters",param ,"################################")
 
-for epoch in range(args.niters):
-    total_train_loss = 0
-    val_loss = 0
-    test_loss = 0
-    #RMSD = []
-    #breakpoint()
-    if epoch == 0:
-        var_coeff = 0.001
-    else:
-        var_coeff = 2*scheduler.get_last_lr()[0]
-    
-    for entry,(time_steps,batch) in enumerate(zip(time_loader,Train_loader)):
-        optimizer.zero_grad()
-        data = batch[0].to(device).view(num_years,1,len(paths_to_data)*(args.scale+1),H,W)
-        past_sample = vel_train[entry].view(num_years,2*len(paths_to_data)*(args.scale+1),H,W).to(device)
-        model.update_param([past_sample,const_channels_info.to(device),lat_map.to(device),lon_map.to(device)])
-        t = time_steps.float().to(device).flatten()
-        mean,std,_ = model(t,data)
-        loss = nll(mean,std,batch.float().to(device),lat,var_coeff)
-        l2_lambda = 0.001
-        l2_norm = sum(p.pow(2.0).sum()
-                for p in model.parameters())
-        loss = loss + l2_lambda * l2_norm
-        loss.backward()
-        optimizer.step()    
-        print("Loss for batch is ",loss.item())
-        if torch.isnan(loss) : 
-            print("Quitting due to Nan loss")
-            quit()
-        total_train_loss = total_train_loss + loss.item()
+profile_task = f'bz{args.batch_size}_inference-{time.strftime("%m%d%H%M")}-or'
+total_train_loss = 0
+val_loss = 0
+test_loss = 0
+#RMSD = []
+#breakpoint()
+var_coeff = 0.001
+step = 0
 
-    lr_val = scheduler.get_last_lr()[0]
-    scheduler.step()
-    print("|Iter ",epoch," | Total Train Loss ", total_train_loss,"|")
-  
-    for entry,(time_steps,batch) in enumerate(zip(time_loader,Val_loader)):
-        data = batch[0].to(device).view(1,1,len(paths_to_data)*(args.scale+1),H,W)
-        past_sample = vel_val[entry].view(1,2*len(paths_to_data)*(args.scale+1),H,W).to(device)
-        model.update_param([past_sample,const_channels_info.to(device),lat_map.to(device),lon_map.to(device)])
-        t = time_steps.float().to(device).flatten()
-        mean,std,_ = model(t,data)
-        loss = nll(mean,std,batch.float().to(device),lat,var_coeff)
-        if torch.isnan(loss) : 
-            print("Quitting due to Nan loss")
-            quit()
-        print("Val Loss for batch is ",loss.item())
-        val_loss = val_loss + loss.item()
-
-    print("|Iter ",epoch," | Total Val Loss ", val_loss,"|")
+with torch.no_grad():
+    with torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True,
+        with_modules=True,
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./profile/climODE/{profile_task}'),
+    ) as p:
+        for entry,(time_steps,batch) in enumerate(zip(time_loader,Val_loader)):
+            p.step()
+            if step >=5:
+                break
+            data = batch[0].to(device).view(1,1,len(paths_to_data)*(args.scale+1),H,W)
+            past_sample = vel_val[entry].view(1,2*len(paths_to_data)*(args.scale+1),H,W).to(device)
+            model.update_param([past_sample,const_channels_info.to(device),lat_map.to(device),lon_map.to(device)])
+            t = time_steps.float().to(device).flatten()
+            mean,std,_ = model(t,data)
 
 
-    if val_loss < best_loss:
-        best_loss = val_loss
-        best_epoch = epoch
-        torch.save(model,str(cwd) + "/Models/" + "ClimODE_global_"+args.solver+"_"+str(args.spectral)+"_model_" + str(epoch) + ".pt")
+
 
 

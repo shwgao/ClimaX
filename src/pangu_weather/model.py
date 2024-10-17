@@ -7,9 +7,9 @@ import numpy as np
 
 def LoadConstantMask(batch_size):
     # # Mask shape must equal (B, 1, H=1440, W=721) + padding
-    land_mask = np.load("dataset/pangu/land_mask.npy")
-    soil_type = np.load("dataset/pangu/soil_type.npy")
-    topography = np.load("dataset/pangu/topography.npy")
+    land_mask = np.load("/nfs/stak/users/gaosho/hpc-share/dataset/pangu/land_mask.npy")
+    soil_type = np.load("/nfs/stak/users/gaosho/hpc-share/dataset/pangu/soil_type.npy")
+    topography = np.load("/nfs/stak/users/gaosho/hpc-share/dataset/pangu/topography.npy")
     
     # land_mask = np.random.random((1440, 721))
     # soil_type = np.random.random((1440, 721))

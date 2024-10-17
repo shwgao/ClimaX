@@ -2,7 +2,7 @@ import torch
 import yaml
 import time
 
-from pangu_weather.model import WeatherModel
+from model import WeatherModel
 
 # read init args from yaml
 batch_size = 1
@@ -12,7 +12,7 @@ model = WeatherModel(192, [2,6,6,2], [6,12,12,6], 4, batch_size)
 
 profile_task = f'bz1_inference-{time.strftime("%m%d%H%M")}-or'
 
-# move model to device if available
+# 将数据移动到GPU（如果可用）
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 datas = []
 B = batch_size  # You can change this to your desired batch size

@@ -342,7 +342,7 @@ def get_delta_u(u_vel,t_steps):
 
 
 def get_gauss_kernel(shape,lat,lon):
-    cwd = os.getcwd()
+    cwd = '/nfs/stak/users/gaosho/hpc-share/dataset/climODE'
     rows,columns  = shape
     kernel = torch.zeros(shape[0]*shape[1],shape[0]*shape[1])
     pos = []
@@ -356,12 +356,12 @@ def get_gauss_kernel(shape,lat,lon):
             kernel[i][j] = torch.exp(-dist/(2*1*1))
 
     kernel_inv = torch.linalg.inv(kernel).numpy()
-    np.save(str(cwd) +"/kernel.npy",kernel_inv)
+    np.save(cwd +"/kernel.npy",kernel_inv)
 
 
 
 def get_gauss_kernel_region(shape,lat,lon,region):
-    cwd = os.getcwd()
+    cwd = '/nfs/stak/users/gaosho/hpc-share/dataset/climODE'
     rows,columns  = shape
     kernel = torch.zeros(shape[0]*shape[1],shape[0]*shape[1])
     pos = []
@@ -375,7 +375,7 @@ def get_gauss_kernel_region(shape,lat,lon,region):
             kernel[i][j] = torch.exp(-dist/(2*1*1))
 
     kernel_inv = torch.linalg.inv(kernel).numpy()
-    np.save(str(cwd) +"/kernel_"+str(region)+".npy",kernel_inv)
+    np.save(cwd +"/kernel_"+str(region)+".npy",kernel_inv)
 
 
 
@@ -410,7 +410,7 @@ def optimize_vel(num,data,delta_u,vel_model,kernel,H,W,steps=200):
 
 def fit_velocity(time_idx,time_loader,Final_train_data,data_loader,device,num_years,paths_to_data,scale,H,W,types,vel_model,kernel,lat,lon):
     num =0
-    cwd = os.getcwd() 
+    cwd = '/nfs/stak/users/gaosho/hpc-share/dataset/climODE' 
     for idx_steps,time_steps,batch in zip(time_idx,time_loader,data_loader):
         pst = [time_steps[0].item()-i for i in range(3)]
         pst.reverse()
@@ -429,17 +429,17 @@ def fit_velocity(time_idx,time_loader,Final_train_data,data_loader,device,num_ye
             Final_v = torch.cat([Final_v,final_v],dim=0)
         num = num+1
 
-    if os.path.exists(str(cwd) +"/" + types + "_vel.npy"):
-        os.remove(str(cwd) +"/" + types + "_vel.npy")
+    if os.path.exists(cwd +"/" + types + "_vel.npy"):
+        os.remove(cwd +"/" + types + "_vel.npy")
 
-    np.save(str(cwd) +"/" + types + "_vel.npy",Final_v.detach().numpy())
+    np.save(cwd +"/" + types + "_vel.npy",Final_v.detach().numpy())
 
 
 def load_velocity(types):
-    cwd = os.getcwd()
+    cwd = '/nfs/stak/users/gaosho/hpc-share/dataset/climODE'
     vel = []
     for file in types:
-        vel.append(np.load(str(cwd) + "/" + file + "_vel.npy"))
+        vel.append(np.load(cwd + "/" + file + "_vel.npy"))
 
     return (torch.from_numpy(v) for v in vel)
 
